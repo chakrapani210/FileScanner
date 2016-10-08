@@ -81,12 +81,20 @@ public class ScannedData {
     public FileStatistics getFileStatistics() {
         synchronized (mLock) {
             FileStatistics data = new FileStatistics();
-            data.averageSize = mTotalSize / mNoOfFiles;
-            data.largeFiles = mScannedFiles.toArray(new FileData[]{});
+            if(mNoOfFiles == 0) {
+                data.averageSize = 0;
+            } else {
+                data.averageSize = mTotalSize / mNoOfFiles;
+            }
+            if(mScannedFiles != null && mScannedFiles.size() != 0) {
+                data.largeFiles = mScannedFiles.toArray(new FileData[]{});
+            }
             ArrayList<ExtData> extLit = new ArrayList<ExtData>();
-            extLit.addAll(mScannedExt.values());
-            Collections.sort(extLit);
-            data.frequentFiles = extLit.subList(0, MAX_EXTS_SIZE).toArray(new ExtData[]{});
+            if(mScannedExt != null && mScannedExt.size() != 0) {
+                extLit.addAll(mScannedExt.values());
+                Collections.sort(extLit);
+                data.frequentFiles = extLit.subList(0, MAX_EXTS_SIZE).toArray(new ExtData[]{});
+            }
             return data;
         }
     }

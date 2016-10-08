@@ -8,7 +8,9 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.support.annotation.Nullable;
+import android.util.Log;
 
+import com.chakra.filescanner.Utils;
 import com.chakra.filescanner.data.ScannedData;
 
 import java.io.File;
@@ -26,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class FileScannerService extends Service {
     private static final long HALF_SECOND = 500;
+    private static final String TAG = FileScannerService.class.getSimpleName();
     private FileScanner mFileScanner;
     private AtomicBoolean mIsDirectoryScanComplete = new AtomicBoolean(false);
 
@@ -39,6 +42,7 @@ public class FileScannerService extends Service {
     public void onCreate() {
         super.onCreate();
         File sdCardDir = Environment.getExternalStorageDirectory();
+        Log.d(TAG, "Root Sdcard dir: " + sdCardDir.getAbsolutePath());
         mFileScanner = new FileScanner(sdCardDir);
     }
 
@@ -81,9 +85,13 @@ public class FileScannerService extends Service {
                         for (IScanListener listener: mListeners) {
                             int progress = 0;
                             if(mScannedData.getTotalFileCount() != 0) {
+                                int totalFileCount = mScannedData.getTotalFileCount();
                                 //Calculating % value
-                                 progress = 100 * mScannedData.getTotalFileCount()
-                                        / (mScannedData.getTotalFileCount() + mFileQueue.size());
+                                if(totalFileCount+ mFileQueue.size() == 0) {
+                                    progress = 0;
+                                } else {
+                                    progress = 100 * totalFileCount / (totalFileCount + mFileQueue.size());
+                                }
                             }
                             listener.onProgressUpdate(progress);
                         }
@@ -91,12 +99,14 @@ public class FileScannerService extends Service {
                         break;
                     case STOP_MSG:
                         mIsScanning = false;
+                        mHandler.removeMessages(UPDATE_MSG);
                         for (IScanListener listener: mListeners) {
                             listener.onStop(mScannedData.getFileStatistics());
                         }
                         break;
                     case COMPLETE_MSG:
                         mIsScanning = false;
+                        mHandler.removeMessages(UPDATE_MSG);
                         for (IScanListener listener: mListeners) {
                             listener.onScanComplete(mScannedData.getFileStatistics());
                         }
@@ -139,11 +149,14 @@ public class FileScannerService extends Service {
         }
 
         private void stopScan(boolean updateUi) {
-            mScanner.pause();
-            mReader.pause();
-            if(updateUi) {
-                mHandler.sendEmptyMessage(STOP_MSG);
+            if(mIsScanning) {
+                mScanner.pause();
+                mReader.pause();
+                if(updateUi) {
+                    mHandler.sendEmptyMessage(STOP_MSG);
+                }
             }
+            mHandler.removeMessages(UPDATE_MSG);
         }
         @Override
         public void registerScanListener(IScanListener listener) {
@@ -160,6 +173,7 @@ public class FileScannerService extends Service {
 
             @Override
             public void run() {
+                Log.d(TAG, "Scanner Thread started.!!!");
                 try {
                     while (!isPaused.get()) {
                         File dir = mDirQueue.poll();
@@ -167,8 +181,10 @@ public class FileScannerService extends Service {
                             File[] files = dir.listFiles();
                             for (File file : files) {
                                 if (file.isDirectory()) {
+                                    //Add to Dir list to trace
                                     mDirQueue.offer(file);
                                 } else {
+                                    //Add to Files list for process
                                     mFileQueue.put(file);
                                 }
                             }
@@ -180,9 +196,11 @@ public class FileScannerService extends Service {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+                Log.d(TAG, "Scanner Thread: scanning is competed.!!!");
             }
 
             void pause() {
+                Log.d(TAG, "Scanner: stopping thread");
                 isPaused.set(true);
                 Thread.currentThread().interrupt();
             }
@@ -192,10 +210,12 @@ public class FileScannerService extends Service {
 
             @Override
             public void run() {
+                Log.d(TAG, "FileReader started.!!!");
                 try {
                     while (!isPaused.get() && !mIsDirectoryScanComplete.get()) {
                         File file = mFileQueue.poll(1, TimeUnit.SECONDS);
                         if(file != null) {
+                            Log.d(TAG, "FileReader: Adding file for Analysis, File name: " + file.getName());
                             mScannedData.addFile(file);
                         }
                     }
@@ -205,9 +225,11 @@ public class FileScannerService extends Service {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+                Log.d(TAG, "FileReader: Analysis is completed.");
             }
 
             void pause() {
+                Log.d(TAG, "FileReader: stopping thread");
                 isPaused.set(true);
                 Thread.currentThread().interrupt();
             }
