@@ -81,9 +81,13 @@ public class FileScannerService extends Service {
                         for (IScanListener listener: mListeners) {
                             int progress = 0;
                             if(mScannedData.getTotalFileCount() != 0) {
+                                int totalFileCount = mScannedData.getTotalFileCount();
                                 //Calculating % value
-                                 progress = 100 * mScannedData.getTotalFileCount()
-                                        / (mScannedData.getTotalFileCount() + mFileQueue.size());
+                                if(totalFileCount+ mFileQueue.size() == 0) {
+                                    progress = 0;
+                                } else {
+                                    progress = 100 * totalFileCount / (totalFileCount + mFileQueue.size());
+                                }
                             }
                             listener.onProgressUpdate(progress);
                         }
@@ -91,12 +95,14 @@ public class FileScannerService extends Service {
                         break;
                     case STOP_MSG:
                         mIsScanning = false;
+                        mHandler.removeMessages(UPDATE_MSG);
                         for (IScanListener listener: mListeners) {
                             listener.onStop(mScannedData.getFileStatistics());
                         }
                         break;
                     case COMPLETE_MSG:
                         mIsScanning = false;
+                        mHandler.removeMessages(UPDATE_MSG);
                         for (IScanListener listener: mListeners) {
                             listener.onScanComplete(mScannedData.getFileStatistics());
                         }
@@ -139,11 +145,14 @@ public class FileScannerService extends Service {
         }
 
         private void stopScan(boolean updateUi) {
-            mScanner.pause();
-            mReader.pause();
-            if(updateUi) {
-                mHandler.sendEmptyMessage(STOP_MSG);
+            if(mIsScanning) {
+                mScanner.pause();
+                mReader.pause();
+                if(updateUi) {
+                    mHandler.sendEmptyMessage(STOP_MSG);
+                }
             }
+            mHandler.removeMessages(UPDATE_MSG);
         }
         @Override
         public void registerScanListener(IScanListener listener) {
